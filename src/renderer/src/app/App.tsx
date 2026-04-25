@@ -29,7 +29,7 @@ import {
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { mergeAttributes, Node } from '@tiptap/core';
-import { ChangeEvent, FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, ClipboardEvent, FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AppSettings,
   Attachment,
@@ -708,6 +708,44 @@ function EditorCanvas({
     void onSave(draft);
   }
 
+  function attachmentNameFor(file: File): string {
+    if (file.name) {
+      return file.name;
+    }
+    const extension = file.type.split('/')[1] || 'png';
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    return `pasted-image-${timestamp}.${extension}`;
+  }
+
+  function fileToAttachment(file: File): Promise<Attachment> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Unable to read pasted image'));
+      reader.onload = () => {
+        resolve({
+          id: crypto.randomUUID(),
+          noteId: draft.id,
+          name: attachmentNameFor(file),
+          mimeType: file.type || 'image/png',
+          sizeBytes: file.size,
+          caption: '',
+          dataUrl: String(reader.result),
+          createdAt: new Date().toISOString()
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function addAttachment(file: File) {
+    const attachment = await fileToAttachment(file);
+    setDraft((current) => {
+      const next = { ...current, attachments: [...current.attachments, { ...attachment, noteId: current.id }] };
+      void onSave(next);
+      return next;
+    });
+  }
+
   function addSecret() {
     const field: SecretField = {
       id: crypto.randomUUID(),
@@ -732,26 +770,22 @@ function EditorCanvas({
   function addImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const attachment: Attachment = {
-        id: crypto.randomUUID(),
-        noteId: draft.id,
-        name: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        sizeBytes: file.size,
-        caption: '',
-        dataUrl: String(reader.result),
-        createdAt: new Date().toISOString()
-      };
-      update({ attachments: [...draft.attachments, attachment] });
-      event.target.value = '';
-    };
-    reader.readAsDataURL(file);
+    void addAttachment(file);
+    event.target.value = '';
+  }
+
+  function pasteImage(event: ClipboardEvent<HTMLElement>) {
+    const items = Array.from(event.clipboardData.items);
+    const imageItem = items.find((item) => item.kind === 'file' && item.type.startsWith('image/'));
+    const file = imageItem?.getAsFile() ?? Array.from(event.clipboardData.files).find((item) => item.type.startsWith('image/'));
+    if (!file) return;
+
+    event.preventDefault();
+    void addAttachment(file);
   }
 
   return (
-    <article className="editor-canvas">
+    <article className="editor-canvas" onPaste={pasteImage}>
       <input className="title-input" value={draft.title} onChange={(event) => update({ title: event.target.value })} onBlur={save} />
       <div className="note-subline">
         <span>
