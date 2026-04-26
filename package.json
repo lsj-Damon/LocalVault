@@ -10,7 +10,8 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "test": "tsx --test tests/**/*.test.ts",
-    "dist": "npm run build && electron-builder --win"
+    "dist": "npm run dist:win",
+    "dist:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-win.ps1"
   },
   "dependencies": {
     "@floating-ui/dom": "^1.7.6",

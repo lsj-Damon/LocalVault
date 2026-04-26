@@ -367,6 +367,7 @@ export function App() {
               onReveal={reveal}
               onRestore={restoreNote}
               onDeleteForever={deleteForever}
+              onToast={setToast}
               onSave={saveNote}
             />
           ) : (
@@ -683,6 +684,7 @@ function EditorCanvas({
   onDeleteForever,
   onRestore,
   onReveal,
+  onToast,
   onSave
 }: {
   note: Note;
@@ -691,6 +693,7 @@ function EditorCanvas({
   onDeleteForever: () => void;
   onRestore: () => void;
   onReveal: (field: SecretField) => void;
+  onToast: (message: string) => void;
   onSave: (note: Note) => void;
 }) {
   const [draft, setDraft] = useState(note);
@@ -836,6 +839,7 @@ function EditorCanvas({
             attachments: draft.attachments.map((attachment) => (attachment.id === attachmentId ? { ...attachment, caption } : attachment))
           })
         }
+        onToast={onToast}
         onRemove={(attachmentId) =>
           update({
             attachments: draft.attachments.filter((attachment) => attachment.id !== attachmentId)
@@ -996,27 +1000,137 @@ function RichTextToolbar({ editor }: { editor: Editor }) {
 function AttachmentsGallery({
   attachments,
   onCaption,
+  onToast,
   onRemove
 }: {
   attachments: Attachment[];
   onCaption: (attachmentId: string, caption: string) => void;
+  onToast: (message: string) => void;
   onRemove: (attachmentId: string) => void;
 }) {
+  const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
+  const [imageContextMenu, setImageContextMenu] = useState<{ attachment: Attachment; x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!previewAttachment) return;
+    const handlePreviewKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setPreviewAttachment(null);
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') {
+        event.preventDefault();
+        void copyAttachmentImage(previewAttachment);
+      }
+    };
+    window.addEventListener('keydown', handlePreviewKeyDown);
+    return () => window.removeEventListener('keydown', handlePreviewKeyDown);
+  }, [previewAttachment]);
+
+  useEffect(() => {
+    if (!imageContextMenu) return;
+    const closeMenu = () => setImageContextMenu(null);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeMenu();
+      }
+    };
+    window.addEventListener('pointerdown', closeMenu);
+    window.addEventListener('scroll', closeMenu, true);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.removeEventListener('pointerdown', closeMenu);
+      window.removeEventListener('scroll', closeMenu, true);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [imageContextMenu]);
+
+  async function copyAttachmentImage(attachment: Attachment) {
+    if (!attachment.dataUrl) return;
+    try {
+      await api.clipboard.writeImage({ dataUrl: attachment.dataUrl });
+      setImageContextMenu(null);
+      onToast('Image copied');
+    } catch {
+      onToast('Unable to copy image');
+    }
+  }
+
+  function openImageContextMenu(event: MouseEvent<HTMLImageElement>, attachment: Attachment) {
+    event.preventDefault();
+    setImageContextMenu({ attachment, x: event.clientX, y: event.clientY });
+  }
+
   if (attachments.length === 0) {
     return <ServerRackImage />;
   }
 
   return (
-    <div className="attachment-gallery">
-      {attachments.map((attachment) => (
-        <figure className="attachment-card" key={attachment.id}>
-          {attachment.dataUrl && attachment.mimeType.startsWith('image/') ? <img src={attachment.dataUrl} alt={attachment.caption || attachment.name} /> : <div className="attachment-file"><Paperclip size={20} />{attachment.name}</div>}
-          <figcaption>
-            <input placeholder="Image caption" value={attachment.caption} onChange={(event) => onCaption(attachment.id, event.target.value)} />
-            <button className="text-button compact" onClick={() => onRemove(attachment.id)}>Remove</button>
-          </figcaption>
-        </figure>
-      ))}
+    <>
+      <div className="attachment-gallery">
+        {attachments.map((attachment) => (
+          <figure className="attachment-card" key={attachment.id}>
+            {attachment.dataUrl && attachment.mimeType.startsWith('image/') ? (
+              <img
+                src={attachment.dataUrl}
+                alt={attachment.caption || attachment.name}
+                onDoubleClick={() => setPreviewAttachment(attachment)}
+                onContextMenu={(event) => openImageContextMenu(event, attachment)}
+                title="Double-click to preview"
+              />
+            ) : (
+              <div className="attachment-file"><Paperclip size={20} />{attachment.name}</div>
+            )}
+            <figcaption>
+              <input placeholder="Image caption" value={attachment.caption} onChange={(event) => onCaption(attachment.id, event.target.value)} />
+              <button className="text-button compact" onClick={() => onRemove(attachment.id)}>Remove</button>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+      {imageContextMenu ? (
+        <ImageContextMenu
+          attachment={imageContextMenu.attachment}
+          x={imageContextMenu.x}
+          y={imageContextMenu.y}
+          onCopy={() => void copyAttachmentImage(imageContextMenu.attachment)}
+        />
+      ) : null}
+      {previewAttachment?.dataUrl ? (
+        <div className="image-preview-backdrop" role="dialog" aria-modal="true" aria-label={previewAttachment.caption || previewAttachment.name} onClick={() => setPreviewAttachment(null)}>
+          <figure className="image-preview" onClick={(event) => event.stopPropagation()}>
+            <button className="icon-button flat image-preview-close" onClick={() => setPreviewAttachment(null)} aria-label="Close image preview">
+              <X size={24} />
+            </button>
+            <img src={previewAttachment.dataUrl} alt={previewAttachment.caption || previewAttachment.name} onContextMenu={(event) => openImageContextMenu(event, previewAttachment)} />
+            <figcaption>{previewAttachment.caption || previewAttachment.name}</figcaption>
+          </figure>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function ImageContextMenu({
+  attachment,
+  x,
+  y,
+  onCopy
+}: {
+  attachment: Attachment;
+  x: number;
+  y: number;
+  onCopy: () => void;
+}) {
+  const left = Math.min(x, window.innerWidth - 190);
+  const top = Math.min(y, window.innerHeight - 56);
+
+  return (
+    <div className="image-context-menu" style={{ left, top }} onPointerDown={(event) => event.stopPropagation()}>
+      <button onClick={onCopy} aria-label={`Copy ${attachment.caption || attachment.name}`}>
+        <FileText size={16} />
+        <span>Copy image</span>
+      </button>
     </div>
   );
 }

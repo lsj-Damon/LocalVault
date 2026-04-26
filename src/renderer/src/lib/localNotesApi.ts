@@ -401,6 +401,17 @@ const browserNotesApi: NotesApi = {
       });
     }
   },
+  clipboard: {
+    async writeImage(input) {
+      const response = await fetch(input.dataUrl);
+      const blob = await response.blob();
+      if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type || 'image/png']: blob })]);
+        return;
+      }
+      await navigator.clipboard.writeText(input.dataUrl);
+    }
+  },
   file: {
     async saveText(input) {
       downloadTextFile(input);

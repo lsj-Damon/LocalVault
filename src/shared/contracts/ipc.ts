@@ -21,6 +21,7 @@ export const IPC_CHANNELS = {
   settingsSave: 'settings:save',
   backupExport: 'backup:export',
   backupImport: 'backup:import',
+  clipboardWriteImage: 'clipboard:writeImage',
   fileSaveText: 'file:saveText',
   fileOpenJson: 'file:openJson'
 } as const;

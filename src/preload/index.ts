@@ -4,6 +4,7 @@ import type {
   AppSettings,
   BackupPayload,
   ChangePasswordInput,
+  ClipboardImageInput,
   ExportSensitiveStrategy,
   NoteStatus,
   SaveDraftInput,
@@ -50,6 +51,9 @@ contextBridge.exposeInMainWorld('notesApi', {
   backup: {
     export: () => ipcRenderer.invoke(IPC_CHANNELS.backupExport),
     import: (payload: BackupPayload) => ipcRenderer.invoke(IPC_CHANNELS.backupImport, payload)
+  },
+  clipboard: {
+    writeImage: (input: ClipboardImageInput) => ipcRenderer.invoke(IPC_CHANNELS.clipboardWriteImage, input)
   },
   file: {
     saveText: (input: SaveTextFileInput) => ipcRenderer.invoke(IPC_CHANNELS.fileSaveText, input),

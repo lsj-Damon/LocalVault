@@ -86,6 +86,10 @@ export interface SaveTextFileInput extends ExportResult {
   filters?: Array<{ name: string; extensions: string[] }>;
 }
 
+export interface ClipboardImageInput {
+  dataUrl: string;
+}
+
 export interface AppSettings {
   autoLockMinutes: number;
   dataDirectory: string;
@@ -159,6 +163,9 @@ export interface NotesApi {
   backup: {
     export(): Promise<ExportResult>;
     import(payload: BackupPayload): Promise<void>;
+  };
+  clipboard: {
+    writeImage(input: ClipboardImageInput): Promise<void>;
   };
   file: {
     saveText(input: SaveTextFileInput): Promise<{ canceled: boolean; path?: string }>;

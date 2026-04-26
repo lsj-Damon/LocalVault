@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, screen, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, screen, shell } from 'electron';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { IPC_CHANNELS } from '../shared/contracts/ipc';
@@ -6,6 +6,7 @@ import type {
   AppSettings,
   BackupPayload,
   ChangePasswordInput,
+  ClipboardImageInput,
   ExportSensitiveStrategy,
   SaveDraftInput,
   SaveTextFileInput
@@ -58,6 +59,13 @@ const registerIpcHandlers = (): void => {
   ipcMain.handle(IPC_CHANNELS.settingsSave, (_event, settings: AppSettings) => store.saveSettings(settings));
   ipcMain.handle(IPC_CHANNELS.backupExport, () => store.exportBackup());
   ipcMain.handle(IPC_CHANNELS.backupImport, (_event, payload: BackupPayload) => store.importBackup(payload));
+  ipcMain.handle(IPC_CHANNELS.clipboardWriteImage, (_event, input: ClipboardImageInput) => {
+    const image = nativeImage.createFromDataURL(input.dataUrl);
+    if (image.isEmpty()) {
+      throw new Error('Unable to copy image data.');
+    }
+    clipboard.writeImage(image);
+  });
   ipcMain.handle(IPC_CHANNELS.fileSaveText, async (_event, input: SaveTextFileInput) => {
     const result = await dialog.showSaveDialog({
       defaultPath: input.fileName,
